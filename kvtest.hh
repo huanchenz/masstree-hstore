@@ -1622,6 +1622,8 @@ void kvtest_tpcc_seed(C &client)
     std::vector<std::string> ops;
     std::vector<std::string> keys;
     std::vector<std::string> vals;
+    std::vector<Str> keys_str;
+    std::vector<Str> vals_str;
     unsigned count = 0;
 
     std::string put("PUT");
@@ -1701,80 +1703,45 @@ void kvtest_tpcc_seed(C &client)
 	client.notice("UNRECOGNIZED CMD: %s\n", op.c_str());
       count++;
     }
+
+    for (int i = 0; i < (int)ops.size(); i++) {
+      int key_size, val_size, key_char_size, val_char_size;
+      key_size = keys[i].length();
+      val_size = vals[i].length();
+      key_char_size = (key_size + 1)/2;
+      val_char_size = (val_size + 1)/2;
+      char* key_char = (char*)malloc(key_char_size);
+      char* val_char = (char*)malloc(val_char_size);
+      for (int j = 0; j < key_size; j += 2){
+	key_char[j/2] = (char)(int)strtol(keys[i].substr(j,2).c_str(), NULL, 16);
+      }
+      for (int j = 0; j < val_size; j += 2){
+	val_char[j/2] = (char)(int)strtol(vals[i].substr(j,2).c_str(), NULL, 16);
+      }
+      keys_str.push_back(Str(key_char, key_char_size));
+      vals_str.push_back(Str(val_char, val_char_size));
+    }
+
     double t0 = client.now();
     Str prev_key;
+
     for (int i = 0; i < (int)ops.size(); i++) {
       op = ops[i];
-      key = keys[i];
-      val = vals[i];
-      //client.notice("%d: %s\t%s\t%s\t", i, op.c_str(), key.c_str(), val.c_str());
       if (op.compare(put) == 0) {
-        int key_size = key.length();
-        int val_size = val.length();
-	int key_char_size = (key_size + 1)/2;
-	int val_char_size = (val_size + 1)/2;
-	//client.notice("key_size: %d\tval_size: %d\n", key_size, val_size);
-        char* key_char = (char*)malloc(key_char_size);
-        char* val_char = (char*)malloc(val_char_size);
-        for (int i = 0; i < key_size; i += 2){
-          key_char[i/2] = (char)(int)strtol(key.substr(i,2).c_str(), NULL, 16);
-	  //std::cout << "key byte = " << key.substr(i,2).c_str() << "\t";
-	  //std::cout << "key_char[" << i/2 << "] = " << key_char[i/2] << "\n";
-        }
-        for (int i = 0; i < val_size; i += 2){
-          val_char[i/2] = (char)(int)strtol(val.substr(i,2).c_str(), NULL, 16);
-	  //std::cout << "val byte = " << val.substr(i,2).c_str() << "\t";
-	  //std::cout << "val_char[" << i/2 << "] = " << val_char[i/2] << "\n";
-        }
-	Str key_str(key_char, key_char_size);
-	Str val_str(val_char, val_char_size);
-        client.put(key_str, val_str);
-	//client.append(key_char, val_char);
-	/*
-	std::cout << "PUT\tkey: ";
-	for (int i = 0; i < key_str.len; i++) {
-	  std::cout << (int)key_str.s[i] << "\t";
-	}
-	std::cout << "\n\tval: ";
-	for (int i = 0; i < val_str.len; i++) {
-	  std::cout << (int)val_str.s[i] << "\t";
-	}
-	std::cout << "\n";
-	*/
-        free(key_char);
-        free(val_char);
+        client.put(keys_str[i], vals_str[i]);
       }
       else if ((op.compare(get) == 0) || (op.compare(scan) == 0)) {
-        int key_size = key.length();
-	int key_char_size = (key_size + 1)/2;
-        char* key_char = (char*)malloc(key_char_size);
-        for (int i = 0; i < key_size; i += 2){
-          key_char[i/2] = (char)(int)strtol(key.substr(i,2).c_str(), NULL, 16);
-        }
-	Str key_str(key_char, key_char_size);
 	Str value_str("");
-        bool get_success = client.get_sync(key_str, value_str);
-	//client.notice("GET key:%s\tvalue:%s\n", key_str.s, value_str.s);
+        bool get_success = client.get_sync(keys_str[i], value_str);
+	prev_key.assign(keys_str[i].s);
 	/*
-	std::cout << "GET\tkey: ";
-	for (int i = 0; i < key_size; i += 2) {
-	  std::cout << (int)key_str.s[i/2] << "\t";
-	}
-	std::cout << "\n\tval: ";
-	for (int i = 0; i < value_str.len; i++) {
-	  std::cout << (int)value_str.s[i] << "\t";
-	}
-	std::cout << "\n";
-	*/
-	prev_key.assign(key_char);
         if (!get_success) {
 	  if (op.compare(get) == 0)
-	    client.notice("GET FAILED at cmd #%d\t%s\n", i, key.c_str());
+	    client.notice("GET FAILED at cmd #%d\t%s\n", i, keys[i].c_str());
 	  else
-	    client.notice("SCAN FAILED at cmd #%d\t%s\n", i, key.c_str());
+	    client.notice("SCAN FAILED at cmd #%d\t%s\n", i, keys[i].c_str());
 	}
-	//client.notice("KEY:%s\tVALUE:%s\n", key_str.s, value_str.s);
-        free(key_char);
+	*/
       }
       else if (op.compare(nval) == 0) {
 	
@@ -1785,34 +1752,10 @@ void kvtest_tpcc_seed(C &client)
 	if (!get_next_success)
 	  client.notice("GET_NEXT FAILED at cmd #%d\n", i);
       }
-      /*
-      else if (op.compare(scan) == 0) {
-        int key_size = key.length();
-        int range = atoi(val.c_str());
-        char* key_char = (char*)malloc(key_size/2);
-        for (int i = 0; i < key_size; i += 2){
-          std::string byte = key.substr(i,2);
-          key_char[i/2] = (char)(int)strtol(byte.c_str(), NULL, 16);
-        }
-        std::vector<Str> keys, values;
-        client.scan_sync(Str(key_char), range, keys, values);
-        if (((int)keys.size() != range) && ((int)values.size() != range))
-          client.notice("SCAN FAILED\n");
-        free(key_char);
-      }
-      */      
       else if (op.compare(del) == 0) {
-        int key_size = key.length();
-	int key_char_size = (key_size + 1)/2;
-        char* key_char = (char*)malloc(key_char_size);
-        for (int i = 0; i < key_size; i += 2){
-          key_char[i/2] = (char)(int)strtol(key.substr(i,2).c_str(), NULL, 16);
-        }
-	Str key_str(key_char, key_char_size);
-        bool remove_success = client.remove_sync(key_str);
+        bool remove_success = client.remove_sync(keys_str[i]);
 	if (!remove_success)
           client.notice("REMOVE FAILED at cmd #%d\n", i);
-        free(key_char);
       }
       else {
 	client.notice("CMD IGNORED: %s\n", op.c_str());
@@ -1820,6 +1763,10 @@ void kvtest_tpcc_seed(C &client)
       }
     }
     double t1 = client.now();
+
+    client.notice("Total pool memory: %d\n", client.ti_->poolmem);
+    client.notice("Total general memory: %d\n", client.ti_->genmem);
+    client.notice("Total MEMORY: %d\n", client.ti_->poolmem + client.ti_->genmem);
     
     client.notice("put:%d\tget:%d\tnval:%d\tdel:%d\tscan:%d\tnextkey:%d\n", putCount, getCount, nvalCount, delCount, scanCount, nextCount);
 

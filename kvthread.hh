@@ -196,6 +196,10 @@ class threadinfo {
     // XXX destructor
     static pthread_key_t key;
 
+    //huanchen
+    int poolmem;
+    int genmem;
+
     // thread information
     int purpose() const {
         return purpose_;
@@ -304,6 +308,9 @@ class threadinfo {
 
     // memory allocation
     void* allocate(size_t sz, memtag tag) {
+      //huanchen
+      genmem += sz;
+
         void *p = malloc(sz + memdebug_size);
         p = memdebug::make(p, sz, tag << 8);
         if (p)
@@ -312,12 +319,18 @@ class threadinfo {
     }
     void deallocate(void* p, size_t sz, memtag tag) {
         // in C++ allocators, 'p' must be nonnull
+      //huanchen
+      genmem -= sz;
+
         assert(p);
         p = memdebug::check_free(p, sz, tag << 8);
         free(p);
         mark(threadcounter(tc_alloc + (tag > memtag_value)), -sz);
     }
     void deallocate_rcu(void *p, size_t sz, memtag tag) {
+      //huanchen
+      genmem -= sz;
+
         assert(p);
         memdebug::check_rcu(p, sz, tag << 8);
         record_rcu(p, tag << 8);
@@ -325,6 +338,9 @@ class threadinfo {
     }
 
     void* pool_allocate(size_t sz, memtag tag) {
+      //huanchen
+      poolmem += sz;
+
         int nl = (sz + memdebug_size + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE;
         assert(nl <= pool_max_nlines);
         if (unlikely(!pool_[nl - 1]))
@@ -339,6 +355,9 @@ class threadinfo {
         return p;
     }
     void pool_deallocate(void* p, size_t sz, memtag tag) {
+      //huanchen
+      poolmem -= sz;
+
         int nl = (sz + memdebug_size + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE;
         assert(p && nl <= pool_max_nlines);
         p = memdebug::check_free(p, sz, (tag << 8) + nl);
@@ -351,6 +370,9 @@ class threadinfo {
              -nl * CACHE_LINE_SIZE);
     }
     void pool_deallocate_rcu(void* p, size_t sz, memtag tag) {
+      //huanchen
+      poolmem -= sz;
+
         int nl = (sz + memdebug_size + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE;
         assert(p && nl <= pool_max_nlines);
         memdebug::check_rcu(p, sz, (tag << 8) + nl);
